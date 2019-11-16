@@ -5,6 +5,7 @@
  *
  * @description: A set of functions called "actions" of the `paymaya` plugin.
  */
+const sdk = require("paymaya-node-sdk");
 
 module.exports = {
 
@@ -15,12 +16,110 @@ module.exports = {
    */
 
   index: async (ctx) => {
-    // Add your own logic here.
-    let res = await strapi.plugins.paymaya.services.paymaya.checkout("item", "buyer");
-    // Send 200 `ok`
-    ctx.send({
-      message: 'ok',
-      response: res
+    // Add your own logic here
+    let config = strapi.config.paymaya;
+
+    var ItemAmountDetails = sdk.ItemAmountDetails;
+    var ItemAmount = sdk.ItemAmount;
+    var Item = sdk.Item;
+    var Contact = sdk.Contact;ctx.query.orderId
+    var Buyer = sdk.Buyer;
+
+    let order = await strapi.models.orders
+    .findOne({ _id: ctx.query.orderId});
+
+    let delIndexOf = null;
+    delIndexOf = order.items.findIndex(i => i.id === "del-fee");
+    
+
+    console.log(order);
+    console.log(delIndexOf);
+
+    var itemAmountOptions = {
+       currency: config.currency
+    };
+
+    var itemOptions = {};
+
+    var itemAmountDetails = new ItemAmountDetails();
+
+    if(delIndexOf > 0) {
+      itemAmountDetails.shippingFee = order.items[delIndexOf].price;
+    }   
+
+    itemAmountDetails.subTotal = order.meta.total;
+    itemAmountOptions.details = itemAmountDetails;
+    
+    var totalAmount = new ItemAmount();
+      totalAmount.currency = itemAmountOptions.currency;
+      totalAmount.value = itemAmountDetails.subTotal;
+      totalAmount.details = itemAmountOptions.details;
+
+    config.currency;
+    let items = [];
+
+    order.items.forEach(x => {
+
+      if(x.id !== 'del-fee') {
+        var itemAmount = new ItemAmount();
+        itemAmount.currency = itemAmountOptions.currency;
+        itemAmount.value = parseFloat(x.price) * x.qty;
+        itemAmount.details = itemAmountOptions.details;
+
+        console.log(itemAmount)
+
+        var item = new Item();
+        item.name = x.name;
+        item.code = x.id;
+        item.quantity = x.qty
+        item.amount = itemAmount;
+        item.totalAmount = itemAmount;
+
+        items.push(item);
+      }
+      
     });
+
+    var redirectUrls = {
+      "success": `${config.successRedirect}?orderId=${ctx.query.orderId}`,
+      "failed": `${config.failedRedirect}?orderId=${ctx.query.orderId}`
+  }
+
+var contact = new Contact();
+contact.phone = order.meta.phone;
+contact.email = order.user.email;
+
+var buyer = new Buyer();
+buyer.firstName = order.user.name;
+buyer.contact = contact;
+
+    //let res = 'succes';
+    let res = await strapi.plugins.paymaya.services.paymaya.checkout(items, buyer, "123456789", totalAmount, redirectUrls);
+    if(res.checkoutId) {
+      let payment = await Payments.create({
+        payID: res.checkoutId,
+        meta: {
+            amount: order.meta.total
+        },
+        orderId: ctx.query.orderId,
+        status: "waiting for approval",
+        date: new Date()
+     });
+      return ctx.send(res);
+    }
+    // Send 200 `ok`
+    return ctx.send({error: res});
+  },
+  
+  verify: async (ctx) => {
+    let payment = await strapi.models.payments
+    .findOne({ orderId: ctx.query.orderId});
+    let res = await strapi.plugins.paymaya.services.paymaya.getCheckout(payment.payID);
+    console.log(res);
+    if(res.paymentStatus === 'PAYMENT_SUCCESS') {
+      return ctx.redirect('/postpaymaya/success.html');
+    }
+    // return ctx.send(res);
+    return ctx.redirect('/postpaymaya/failed.html');
   }
 };

@@ -7,6 +7,14 @@
       "config": {
         "policies": []
       }
+    },
+    {
+      "method": "GET",
+      "path": "/success",
+      "handler": "Paymaya.verify",
+      "config": {
+        "policies": []
+      }
     }
   ]
 }

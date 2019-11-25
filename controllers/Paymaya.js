@@ -82,7 +82,7 @@ module.exports = {
 
     var redirectUrls = {
       "success": `${config.successRedirect}?orderId=${ctx.query.orderId}`,
-      "failed": `${config.failedRedirect}?orderId=${ctx.query.orderId}`
+      "failure": `${config.failedRedirect}?orderId=${ctx.query.orderId}`
   }
 
 var contact = new Contact();
@@ -102,7 +102,7 @@ buyer.contact = contact;
             amount: order.meta.total
         },
         orderId: ctx.query.orderId,
-        status: "waiting for approval",
+        status: "Waiting for checkout",
         date: new Date()
      });
       return ctx.send(res);
@@ -116,10 +116,16 @@ buyer.contact = contact;
     .findOne({ orderId: ctx.query.orderId});
     let res = await strapi.plugins.paymaya.services.paymaya.getCheckout(payment.payID);
     console.log(res);
+    let sms = await strapi.plugins.karix.services.karix.sendOrderSms(ctx.query.orderId);
     if(res.paymentStatus === 'PAYMENT_SUCCESS') {
-      return ctx.redirect('/postpaymaya/success.html');
+      await Payments.updateOne({payID: payment.payID}, {status: "Success"});
+      await Orders.updateOne({_id: ctx.query.orderId}, {status: "Paid"});
+      await strapi.plugins.karix.services.karix.sendOrderSms(ctx.query.orderId);
+      return ctx.redirect('/postpayment/success.html');
     }
     // return ctx.send(res);
-    return ctx.redirect('/postpaymaya/failed.html');
+    await Payments.updateOne({payID: payment.payID}, {status: "Failed"});
+    await Orders.updateOne({_id: ctx.query.orderId}, {status: "Payment failed"});
+    return ctx.redirect('/postpayment/failed.html');
   }
 };

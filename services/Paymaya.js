@@ -44,7 +44,7 @@ module.exports = {
         checkout.items = items;
         checkout.redirectUrl = redUrls;
 
-        // console.log(checkout);
+        console.log(checkout);
 
         var createPayment = new Promise(function(resolve, reject) {
             checkout.execute(function (error, response) {

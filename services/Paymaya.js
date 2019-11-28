@@ -80,7 +80,7 @@ module.exports = {
         var checkout = new Checkout();
 
         checkout.id = id;
-
+        console.log("Checkout info:");
         console.log(checkout);
 
         var getPayment = new Promise(function(resolve, reject) {

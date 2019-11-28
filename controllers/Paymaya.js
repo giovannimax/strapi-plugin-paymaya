@@ -22,7 +22,7 @@ module.exports = {
     var ItemAmountDetails = sdk.ItemAmountDetails;
     var ItemAmount = sdk.ItemAmount;
     var Item = sdk.Item;
-    var Contact = sdk.Contact;ctx.query.orderId
+    var Contact = sdk.Contact;
     var Buyer = sdk.Buyer;
 
     let order = await strapi.models.orders
@@ -94,7 +94,7 @@ buyer.firstName = order.user.name;
 buyer.contact = contact;
 
     //let res = 'succes';
-    let res = await strapi.plugins.paymaya.services.paymaya.checkout(items, buyer, "123456789", totalAmount, redirectUrls);
+    let res = await strapi.plugins.paymaya.services.paymaya.checkout(items, buyer, order._id, totalAmount, redirectUrls);
     if(res.checkoutId) {
       let payment = await Payments.create({
         payID: res.checkoutId,
@@ -102,8 +102,9 @@ buyer.contact = contact;
             amount: order.meta.total
         },
         orderId: ctx.query.orderId,
-        status: "Waiting for checkout",
-        date: new Date()
+        status: "PENDING",
+        date: new Date(),
+        redirectUrl: res.redirectUrl
      });
       return ctx.send(res);
     }
@@ -115,16 +116,22 @@ buyer.contact = contact;
     let payment = await strapi.models.payments
     .findOne({ orderId: ctx.query.orderId});
     let res = await strapi.plugins.paymaya.services.paymaya.getCheckout(payment.payID);
-    console.log(res);
-    let sms = await strapi.plugins.karix.services.karix.sendOrderSms(ctx.query.orderId);
+    let stat;
+    switch(res.paymentStatus) {
+        case 'PAYMENT_SUCCESS' : stat = 'SUCCESS'; break;
+        case 'PAYMENT_FAILED' : stat = 'FAILED'; break;
+        case 'PAYMENT_EXPIRED' : stat = 'EXPIRED'; break;
+        case 'PAYMENT_CANCELLED' : stat = 'CANCELLED'; break;
+        case 'PENDING_PAYMENT' : stat = 'PENDING'; break;
+        default: stat = res.paymentStatus;
+    }
+    await Payments.updateOne({payID: payment.payID}, {status: stat});
     if(res.paymentStatus === 'PAYMENT_SUCCESS') {
-      await Payments.updateOne({payID: payment.payID}, {status: "Success"});
       await Orders.updateOne({_id: ctx.query.orderId}, {status: "Paid"});
       await strapi.plugins.karix.services.karix.sendOrderSms(ctx.query.orderId);
       return ctx.redirect('/postpayment/success.html');
     }
     // return ctx.send(res);
-    await Payments.updateOne({payID: payment.payID}, {status: "Failed"});
     await Orders.updateOne({_id: ctx.query.orderId}, {status: "Payment failed"});
     return ctx.redirect('/postpayment/failed.html');
   }

@@ -81,10 +81,9 @@ module.exports = {
     });
 
     var redirectUrls = {
-      "success": `${config.successRedirect}?orderId=${ctx.query.orderId}`,
-      "failure": `${config.failedRedirect}?orderId=${ctx.query.orderId}`
+      "success": `${config.serverRedirect}/paymaya/success?orderId=${ctx.query.orderId}`,
+      "failure": `${config.serverRedirect}/paymaya/failed?orderId=${ctx.query.orderId}`
   }
-
 var contact = new Contact();
 contact.phone = order.meta.phone;
 contact.email = order.user.email;
